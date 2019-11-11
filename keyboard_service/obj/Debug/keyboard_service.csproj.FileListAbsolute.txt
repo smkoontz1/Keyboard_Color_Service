@@ -1,0 +1,7 @@
+C:\Users\Steve\WindowsDevProjects\_git\Keyboard_Service\keyboard_service\bin\Debug\keyboard_service.exe.config
+C:\Users\Steve\WindowsDevProjects\_git\Keyboard_Service\keyboard_service\bin\Debug\keyboard_service.exe
+C:\Users\Steve\WindowsDevProjects\_git\Keyboard_Service\keyboard_service\bin\Debug\keyboard_service.pdb
+C:\Users\Steve\WindowsDevProjects\_git\Keyboard_Service\keyboard_service\obj\Debug\keyboard_service.exe
+C:\Users\Steve\WindowsDevProjects\_git\Keyboard_Service\keyboard_service\obj\Debug\keyboard_service.pdb
+C:\Users\Steve\WindowsDevProjects\_git\Keyboard_Service\keyboard_service\obj\Debug\keyboard_service.ProjectInstaller.resources
+C:\Users\Steve\WindowsDevProjects\_git\Keyboard_Service\keyboard_service\obj\Debug\keyboard_service.csproj.GenerateResource.cache
