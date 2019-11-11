@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.ServiceProcess;
+using System.Threading;
 using System.Timers;
 using LedCSharp;
 
@@ -13,20 +14,23 @@ namespace keyboard_service
         private const int DARKNESS_THRESHOLD = 100;
         private const int BRIGHTNESS_THRESHOLD = 200;
         
-        private static EventLog _eventLog;
-        private static string _storedBackground;
+        private static EventLog EventLog;
+        private static string StoredBackground;
+        private static int CurrentRedPerc;
+        private static int CurrentGreenPerc;
+        private static int CurrentBluePerc;
 
         public KeyboardService()
         {
             InitializeComponent();
 
-            _storedBackground = "";
+            StoredBackground = "";
 
             // Initialize logger
             string _sourceName = "Keyboard Clock Service";
             string _logName = "Keyboard Clock Service Log";
             
-            _eventLog = new EventLog();
+            EventLog = new EventLog();
             this.AutoLog = false;
 
             if (!EventLog.SourceExists(_sourceName))
@@ -34,13 +38,13 @@ namespace keyboard_service
                 EventLog.CreateEventSource(_sourceName, _logName);
             }
 
-            _eventLog.Source = _sourceName;
-            _eventLog.Log = _logName;
+            EventLog.Source = _sourceName;
+            EventLog.Log = _logName;
         }
 
         protected override void OnStart(string[] args)
         {
-            _eventLog.WriteEntry("In OnStart.");
+            EventLog.WriteEntry("In OnStart.");
 
             bool _ledInitialized = LogitechGSDK.LogiLedInitWithName("Keyboard Color Service");
 
@@ -49,7 +53,7 @@ namespace keyboard_service
                 this.Stop();
             }
 
-            _eventLog.WriteEntry("LED SDK Initialized");
+            EventLog.WriteEntry("LED SDK Initialized");
 
             LogitechGSDK.LogiLedSetTargetDevice(LogitechGSDK.LOGI_DEVICETYPE_ALL);
 
@@ -57,15 +61,16 @@ namespace keyboard_service
 
             try
             {
-                _storedBackground = DesktopBackgroundHelper.GetCurrentDesktopBackground();
-                UpdateKeyboard();
+                StoredBackground = DesktopBackgroundHelper.GetCurrentDesktopBackground();
+                UpdateCurrentRGB();
+                FadeUpFromBlack(2000);
             }
             catch (Exception e)
             {
-                _eventLog.WriteEntry(e.Message + e.StackTrace, EventLogEntryType.Error);
+                EventLog.WriteEntry(e.Message + e.StackTrace, EventLogEntryType.Error);
             }
             
-            Timer _timer = new Timer();
+            System.Timers.Timer _timer = new System.Timers.Timer();
             _timer.AutoReset = true;
             _timer.Elapsed += new ElapsedEventHandler(CheckForBackgroundChange);
             _timer.Interval = UPDATE_INTERVAL;
@@ -74,7 +79,7 @@ namespace keyboard_service
 
         protected override void OnStop()
         {
-            _eventLog.WriteEntry("In OnStop.");
+            EventLog.WriteEntry("In OnStop.");
         }
 
         #region Methods
@@ -83,17 +88,65 @@ namespace keyboard_service
         {
             string _currentBackground = DesktopBackgroundHelper.GetCurrentDesktopBackground();
 
-            if (_storedBackground != _currentBackground)
+            if (StoredBackground != _currentBackground)
             {
-                _eventLog.WriteEntry($"Background has been changed to {_currentBackground}. Updating keyboard...");
-                _storedBackground = _currentBackground;
-                UpdateKeyboard();
+                EventLog.WriteEntry($"Background has been changed to {_currentBackground}. Updating keyboard...");
+                StoredBackground = _currentBackground;
+                FadeToBlack(1000);
+                UpdateCurrentRGB();
+                FadeUpFromBlack(1000);
             }
         }
 
-        private static void UpdateKeyboard()
+        public static void FadeToBlack(int milliseconds)
         {
-            _eventLog.WriteEntry($"Processing image: {_storedBackground}");
+            int _redDecreaseStep = CurrentRedPerc / (milliseconds / 100);
+            int _greenDecreaseStep = CurrentGreenPerc / (milliseconds / 100);
+            int _blueDecreaseStep = CurrentBluePerc / (milliseconds / 100);
+
+            // Increment by 100 milliseconds at a time
+            for (int i = 100; i <= milliseconds; i+=100)
+            {
+                Thread.Sleep(100);
+                CurrentRedPerc -= _redDecreaseStep;
+                CurrentGreenPerc -= _greenDecreaseStep;
+                CurrentBluePerc -= _blueDecreaseStep;
+                LogitechGSDK.LogiLedSetLighting(CurrentRedPerc, CurrentGreenPerc, CurrentBluePerc);
+            }
+
+            CurrentRedPerc = 0;
+            CurrentGreenPerc = 0;
+            CurrentBluePerc = 0;
+
+            LogitechGSDK.LogiLedSetLighting(CurrentRedPerc, CurrentGreenPerc, CurrentBluePerc);
+        }
+
+        public static void FadeUpFromBlack(int milliseconds)
+        {
+            int _redIncreaseStep = CurrentRedPerc / (milliseconds / 100);
+            int _greenIncreaseStep = CurrentGreenPerc / (milliseconds / 100);
+            int _blueIncreaseStep = CurrentBluePerc / (milliseconds / 100);
+
+            int _redStepPerc = 0;
+            int _greenStepPerc = 0;
+            int _blueStepPerc = 0;
+
+            // Increment by 100 milliseconds at a time
+            for (int i = 100; i <= milliseconds; i+=100)
+            {
+                Thread.Sleep(100);
+                _redStepPerc += _redIncreaseStep;
+                _greenStepPerc += _greenIncreaseStep;
+                _blueStepPerc += _blueIncreaseStep;
+                LogitechGSDK.LogiLedSetLighting(_redStepPerc, _greenStepPerc, _blueStepPerc);
+            }
+            
+            LogitechGSDK.LogiLedSetLighting(CurrentRedPerc, CurrentGreenPerc, CurrentBluePerc);
+        }
+
+        private static void UpdateCurrentRGB()
+        {
+            EventLog.WriteEntry($"Processing image: {StoredBackground}");
 
             try
             {
@@ -102,7 +155,7 @@ namespace keyboard_service
                 long _sumBlueVals = 0;
                 long _pixelCount = 0;
             
-                Bitmap _background = new Bitmap(_storedBackground);
+                Bitmap _background = new Bitmap(StoredBackground);
 
                 for (int y = 0; y < _background.Height; y++)
                 {
@@ -130,13 +183,15 @@ namespace keyboard_service
                 int _greenPerc = (int)((double)_avgGreen / (double)255 * 100);
                 int _bluePerc = (int)((double)_avgBlue / (double)255 * 100);
 
-                LogitechGSDK.LogiLedSetLighting((int)_redPerc, (int)_greenPerc, (int)_bluePerc);
+                CurrentRedPerc = _redPerc;
+                CurrentGreenPerc = _greenPerc;
+                CurrentBluePerc = _bluePerc;
 
-                _eventLog.WriteEntry($"Finished processing image: {_storedBackground}");
+                EventLog.WriteEntry($"Finished processing image: {StoredBackground}");
             }
             catch (Exception e)
             {
-                _eventLog.WriteEntry(e.Message + e.StackTrace, EventLogEntryType.Error);
+                EventLog.WriteEntry(e.Message + e.StackTrace, EventLogEntryType.Error);
             }
         }
 
